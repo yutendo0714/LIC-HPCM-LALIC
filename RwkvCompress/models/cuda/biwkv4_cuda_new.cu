@@ -386,7 +386,7 @@ torch::Tensor biwkv4_cuda_forward(
     assert(batch_size * num_channels % threads.y == 0);
     const dim3 blocks(batch_size * num_channels / threads.y);
 
-    AT_DISPATCH_FLOATING_TYPES(k.type(), "bi_wkv_forward_cuda", ([&] {
+    AT_DISPATCH_FLOATING_TYPES(k.scalar_type(), "bi_wkv_forward_cuda", ([&] {
         biwkv4_cuda_forward_kernel<scalar_t><<<blocks, threads>>>(
             batch_size,
             num_tokens,
@@ -423,7 +423,7 @@ std::vector<torch::Tensor> biwkv4_cuda_backward(
     assert(batch_size * num_channels % threads.y == 0);
     const dim3 blocks(batch_size * num_channels / threads.y);
 
-    AT_DISPATCH_FLOATING_TYPES(k.type(), "bi_wkv_backward_cuda", ([&] {
+    AT_DISPATCH_FLOATING_TYPES(k.scalar_type(), "bi_wkv_backward_cuda", ([&] {
         biwkv4_cuda_backward_kernel<scalar_t><<<blocks, threads>>>(
             batch_size,
             num_tokens,

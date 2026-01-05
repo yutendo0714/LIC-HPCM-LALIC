@@ -25,7 +25,7 @@ def load_biwkv4():
         raise RuntimeError(f"CUDA sources not found at {rwkv_cuda_dir}")
     
     _biwkv4_cuda = load(
-        name="biwkv4_hpcm",
+        name="biwkv4",
         sources=[
             os.path.join(rwkv_cuda_dir, "biwkv4_op_new.cpp"),
             os.path.join(rwkv_cuda_dir, "biwkv4_cuda_new.cu"),
@@ -59,6 +59,10 @@ class BiWKV4_HPCM(torch.autograd.Function):
     
     @staticmethod
     def forward(ctx, w, u, k, v):
+        global _biwkv4_cuda
+        # Ensure CUDA kernel is loaded before use
+        ensure_biwkv4_loaded()
+        
         half_mode = w.dtype == torch.half
         bf_mode = w.dtype == torch.bfloat16
         
@@ -69,7 +73,8 @@ class BiWKV4_HPCM(torch.autograd.Function):
         k = k.float().contiguous()
         v = v.float().contiguous()
         
-        y = torch.ops.biwkv4_hpcm.forward(w, u, k, v)
+        # Call the CUDA kernel directly from the loaded module
+        y = _biwkv4_cuda.forward(w, u, k, v)
         
         if half_mode:
             y = y.half()
@@ -80,11 +85,16 @@ class BiWKV4_HPCM(torch.autograd.Function):
     
     @staticmethod
     def backward(ctx, gy):
+        global _biwkv4_cuda
+        # Ensure CUDA kernel is loaded before use
+        ensure_biwkv4_loaded()
+        
         w, u, k, v = ctx.saved_tensors
         half_mode = w.dtype == torch.half
         bf_mode = w.dtype == torch.bfloat16
         
-        gw, gu, gk, gv = torch.ops.biwkv4_hpcm.backward(
+        # Call the CUDA kernel directly from the loaded module
+        gw, gu, gk, gv = _biwkv4_cuda.backward(
             w.float().contiguous(),
             u.float().contiguous(),
             k.float().contiguous(),

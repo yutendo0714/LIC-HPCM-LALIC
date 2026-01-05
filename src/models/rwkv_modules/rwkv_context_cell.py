@@ -60,18 +60,18 @@ class RWKVContextCell(nn.Module):
         
         # Spatial Mix with residual connection
         x_spatial = self.spatial_mix(x, resolution)
-        x_norm = rearrange(x, "b c h w -> b h w c")
         x_spatial_norm = rearrange(x_spatial, "b c h w -> b h w c")
-        x_norm = self.ln1(x_norm)
-        x = x + self.gamma1.view(1, 1, 1, -1) * (x_spatial_norm - x_norm)
+        x_spatial_norm = self.ln1(x_spatial_norm)
+        x_norm = rearrange(x, "b c h w -> b h w c")
+        x = x_norm + self.gamma1.view(1, 1, 1, -1) * (x_spatial_norm - x_norm)
         x = rearrange(x, "b h w c -> b c h w")
         
         # Channel Mix with residual connection
         x_channel = self.channel_mix(x, resolution)
-        x_norm = rearrange(x, "b c h w -> b h w c")
         x_channel_norm = rearrange(x_channel, "b c h w -> b h w c")
-        x_norm = self.ln2(x_norm)
-        x = x + self.gamma2.view(1, 1, 1, -1) * (x_channel_norm - x_norm)
+        x_channel_norm = self.ln2(x_channel_norm)
+        x_norm = rearrange(x, "b c h w -> b h w c")
+        x = x_norm + self.gamma2.view(1, 1, 1, -1) * (x_channel_norm - x_norm)
         x = rearrange(x, "b h w c -> b c h w")
         
         return x
