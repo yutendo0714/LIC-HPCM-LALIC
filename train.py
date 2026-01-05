@@ -344,10 +344,14 @@ def main(argv):
     net = net.to(device)
     wandb.watch(net, log="all", log_freq=100)
 
+    # Learning rate scheduler adjusted for batch size 16
+    # When batch size is halved (32->16), learning rate is also halved
+    # Original schedule: 1e-4 -> 3e-5 -> 1e-5 -> 1e-6 at epochs 2750, 2850, 2950
+    # Adjusted for batch size 16: 5e-5 -> 1.5e-5 -> 5e-6 -> 5e-7
     lr_scheduler = lambda x : \
-    1e-4 if x < 2750 else (
-        3e-5 if x < 2850 else (
-            1e-5 if x < 2950 else 1e-6
+    5e-5 if x < 2750 else (
+        1.5e-5 if x < 2850 else (
+            5e-6 if x < 2950 else 5e-7
         )
     )
 
@@ -359,11 +363,36 @@ def main(argv):
     if args.cuda and torch.cuda.device_count() > 1:
         net = CustomDataParallel(net)
 
-    optimizer = optim.Adam(net.parameters(), lr=1e-4)
+    optimizer = optim.Adam(net.parameters(), lr=5e-5)
     criterion = RateDistortionLoss(lmbda=args.lmbda)
 
     best_loss = float("inf")
     global_step = 0
+    
+    # Load checkpoint if specified
+    if args.checkpoint:
+        print(f"Loading checkpoint from {args.checkpoint}")
+        checkpoint = torch.load(args.checkpoint, map_location=device)
+        
+        # Load model state
+        if isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
+            net.load_state_dict(checkpoint['state_dict'])
+            if 'epoch' in checkpoint:
+                last_epoch = checkpoint['epoch'] + 1
+                print(f"Resuming from epoch {last_epoch}")
+            if 'best_loss' in checkpoint:
+                best_loss = checkpoint['best_loss']
+                print(f"Best loss so far: {best_loss:.4f}")
+            if 'optimizer' in checkpoint:
+                optimizer.load_state_dict(checkpoint['optimizer'])
+                print("Optimizer state loaded")
+            if 'global_step' in checkpoint:
+                global_step = checkpoint['global_step']
+                print(f"Resuming from global step {global_step}")
+        else:
+            # Just model weights
+            net.load_state_dict(checkpoint)
+            print("Model weights loaded (no training state)")
     for epoch in range(last_epoch, args.epochs):
 
         lr = lr_scheduler(epoch)
@@ -389,10 +418,24 @@ def main(argv):
 
         if is_best:
             print(f"epoch {epoch} is best now!")
-            torch.save(net.state_dict(), os.path.join(args.save_path, 'epoch_' +'best' + '.pth.tar'))
+            checkpoint_dict = {
+                'epoch': epoch,
+                'state_dict': net.state_dict(),
+                'best_loss': best_loss,
+                'optimizer': optimizer.state_dict(),
+                'global_step': global_step,
+            }
+            torch.save(checkpoint_dict, os.path.join(args.save_path, 'epoch_best.pth.tar'))
 
         if epoch % 500 == 0:
-            torch.save(net.state_dict(), os.path.join(args.save_path, 'epoch_' + str(epoch) + '.pth.tar'))
+            checkpoint_dict = {
+                'epoch': epoch,
+                'state_dict': net.state_dict(),
+                'best_loss': best_loss,
+                'optimizer': optimizer.state_dict(),
+                'global_step': global_step,
+            }
+            torch.save(checkpoint_dict, os.path.join(args.save_path, 'epoch_' + str(epoch) + '.pth.tar'))
 
 
 if __name__ == "__main__":
